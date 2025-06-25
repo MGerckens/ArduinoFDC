@@ -308,21 +308,24 @@ void monitor() {
   char cmd;
   int a1, a2, a3, head, track, sector, n;
 
+  ArduinoFDC.motorOn();
   while (true) {
-    // Serial.print(F("\r\n\r\nCommand: "));
-    n = sscanf(read_user_cmd(tempbuffer, 512), "%c%i,%i,%i,%s", &cmd, &a1, &a2, &a3, &databuffer);
+    Serial.print(F("\r\n\r\nCommand: "));
+    n = sscanf(read_user_cmd(tempbuffer, 512), "%c%i,%i,%i", &cmd, &a1, &a2, &a3);
     if (n <= 0 || isspace(cmd)) continue;
 
     if (cmd == 'r' && n >= 3) {
-      ArduinoFDC.motorOn();
       track = a1;
       sector = a2;
       head = (n == 3) ? 0 : a3;
       if (head >= 0 && head < 2 && track >= 0 && track < ArduinoFDC.numTracks() && sector >= 1 && sector <= ArduinoFDC.numSectors()) {
-        // Serial.print(F("Reading track ")); Serial.print(track);
-        // Serial.print(F(" sector ")); Serial.print(sector);
-        // Serial.print(F(" side ")); Serial.println(head);
-        // Serial.flush();
+        Serial.print(F("Reading track "));
+        Serial.print(track);
+        Serial.print(F(" sector "));
+        Serial.print(sector);
+        Serial.print(F(" side "));
+        Serial.println(head);
+        Serial.flush();
 
         byte status = ArduinoFDC.readSector(track, head, sector, databuffer);
         if (status == S_OK) {
@@ -501,6 +504,8 @@ void monitor() {
 }
 
 #endif
+
+
 
 
 // -------------------------------------------------------------------------------------------------

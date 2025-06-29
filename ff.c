@@ -5421,7 +5421,7 @@ FRESULT f_setlabel (
 			if (IsLower(wc)) wc -= 0x20;		/* To upper ASCII characters */
 #if FF_CODE_PAGE == 0
 			if (ExCvt && wc >= 0x80) wc = ExCvt[wc - 0x80];	/* To upper extended characters (SBCS cfg) */
-#elif FF_CODE_PAGE < 900
+#elif (FF_CODE_PAGE < 900) && (FF_CODE_PAGE > 0)
 			if (wc >= 0x80) wc = ExCvt[wc - 0x80];	/* To upper extended characters (SBCS cfg) */
 #endif
 #endif

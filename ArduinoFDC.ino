@@ -31,11 +31,17 @@
 // Basic helper functions
 // -------------------------------------------------------------------------------------------------
 
-#define TEMPBUFFER_SIZE (sizeof("w1,80,18,") + 512 + 2)
+#define TEMPBUFFER_SIZE (sizeof("w1,80,18,") + 1024 + 2)
 byte tempbuffer[TEMPBUFFER_SIZE];
 
 unsigned long motor_timeout = 0;
 
+// from https://stackoverflow.com/a/34365963
+static byte hextoint(char in) {
+  int const x = in;
+  return (x <= 57) ? x - 48 : (x <= 70) ? (x - 65) + 0x0a
+                                        : (x - 97) + 0x0a;
+}
 
 void print_hex(byte b) {
   if (b < 16) Serial.write('0');
@@ -209,11 +215,14 @@ void print_ff_error(FRESULT fr) {
 #ifdef USE_MONITOR
 
 // re-use the FatFs data buffer if ARDUDOS is enabled (to save RAM)
-#ifdef USE_ARDUDOS
-#define databuffer FatFs.win
-#else
-static byte databuffer[516];
-#endif
+// #ifdef USE_ARDUDOS
+// #define databuffer FatFs.win
+// #else
+
+// static byte databuffer[1024 + 3];
+static char *databuffer = nullptr;
+
+// #endif
 
 
 #ifdef USE_XMODEM
@@ -308,16 +317,24 @@ void monitor() {
   char cmd;
   int a1, a2, a3, head, track, sector, n;
   size_t numCharsRead;
-  char* cmdBuffer;
+  char *cmdPtr;
+
+  // for writing
+  bool firstNibble = true;
+  byte tempByte = 0;
+  size_t inIdx = 0;
+  size_t outIdx = 0;
+
 
   while (true) {
     // Serial.print(F("\r\n\r\nCommand: "));
     // n = sscanf(read_user_cmd(tempbuffer, 512), "%c%i,%i,%i,%s", &cmd, &a1, &a2, &a3, &databuffer);
-    cmdBuffer = read_user_cmd(tempbuffer, TEMPBUFFER_SIZE);
-    n = sscanf(cmdBuffer, "%c%i,%i,%i%n", &cmd, &a1, &a2, &a3, &numCharsRead);
-    if(cmd == 'w'){
-      char* dataPtr = cmdBuffer + numCharsRead + 1;
-      memcpy(databuffer, dataPtr, 512);
+    cmdPtr = read_user_cmd(tempbuffer, TEMPBUFFER_SIZE);
+    n = sscanf(cmdPtr, "%c%i,%i,%i%n", &cmd, &a1, &a2, &a3, &numCharsRead);
+    if (cmd == 'w') {
+      databuffer = cmdPtr + numCharsRead + 1;
+    } else {
+      databuffer = tempbuffer;
     }
 
     if (n <= 0 || isspace(cmd)) continue;
@@ -337,8 +354,10 @@ void monitor() {
         if (status == S_OK) {
           dump_buffer(0, databuffer + 1, 512);
           Serial.println();
-        } else
+        } else{
+          Serial.println("in read");
           print_error(status);
+        }
       } else
         Serial.println(F("Invalid sector specification"));
       ArduinoFDC.motorOff();
@@ -365,6 +384,7 @@ void monitor() {
                 Serial.println(F(" => CRC error, trying again"));
               else {
                 Serial.print(F(" => "));
+                Serial.println("shouldn't be this one");
                 print_error(status);
                 break;
               }
@@ -387,10 +407,30 @@ void monitor() {
         // Serial.print(F(" side ")); Serial.println(head);
         // Serial.flush();
 
+        // convert databuffer from hex to bytes in-place
+        // todo: maybe use base64 instead of hex? a bit more efficient but encode/decode is slower. in read too
+        // Serial.println("writing:");
+        while (outIdx < 512) {
+          if (firstNibble) {
+            tempByte |= hextoint(databuffer[inIdx++]) << 4;
+            firstNibble = false;
+          } else {
+            tempByte |= hextoint(databuffer[inIdx++]);
+            // Serial.print((int)tempByte);
+            // Serial.print(" ");
+            databuffer[outIdx++] = tempByte;
+            tempByte = 0;
+            firstNibble = true;
+          }
+        }
+        outIdx = 0;
+        inIdx = 0;
+
         byte status = ArduinoFDC.writeSector(track, head, sector, databuffer, true);
-        if (status != S_OK)
-          // Serial.println(F("Ok."));
+        if (status != S_OK) {
+          Serial.println(F("Error:"));
           print_error(status);
+        }
       } else
         Serial.println(F("Invalid sector specification"));
       ArduinoFDC.motorOff();

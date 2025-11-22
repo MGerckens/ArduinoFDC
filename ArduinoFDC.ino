@@ -323,7 +323,7 @@ void monitor() {
   bool firstNibble = true;
   byte tempByte = 0;
   size_t inIdx = 0;
-  size_t outIdx = 0;
+  size_t outIdx = 1;
 
 
   while (true) {
@@ -354,7 +354,7 @@ void monitor() {
         if (status == S_OK) {
           dump_buffer(0, databuffer + 1, 512);
           Serial.println();
-        } else{
+        } else {
           Serial.println("in read");
           print_error(status);
         }
@@ -409,8 +409,8 @@ void monitor() {
 
         // convert databuffer from hex to bytes in-place
         // todo: maybe use base64 instead of hex? a bit more efficient but encode/decode is slower. in read too
-        // Serial.println("writing:");
-        while (outIdx < 512) {
+        // data needs to be in databuffer[1 -> 512], not [0 -> 511]
+        while (outIdx < 513) {
           if (firstNibble) {
             tempByte |= hextoint(databuffer[inIdx++]) << 4;
             firstNibble = false;
@@ -423,7 +423,7 @@ void monitor() {
             firstNibble = true;
           }
         }
-        outIdx = 0;
+        outIdx = 1;
         inIdx = 0;
 
         byte status = ArduinoFDC.writeSector(track, head, sector, databuffer, true);

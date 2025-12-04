@@ -20,13 +20,6 @@
 #include "ArduinoFDC.h"
 #include "ff.h"
 
-// commenting this out will remove the low-level disk monitor
-#define USE_MONITOR
-
-// comenting this out will remove support for XModem data transfers
-//#define USE_XMODEM
-
-
 // -------------------------------------------------------------------------------------------------
 // Basic helper functions
 // -------------------------------------------------------------------------------------------------
@@ -141,31 +134,6 @@ void set_drive_type(int n) {
 }
 
 
-// -------------------------------------------------------------------------------------------------
-// XModem data transfer functions
-// -------------------------------------------------------------------------------------------------
-
-
-int recvChar(int msDelay) {
-  unsigned long start = millis();
-  while ((int)(millis() - start) < msDelay) {
-    if (Serial.available()) return (uint8_t)Serial.read();
-  }
-
-  return -1;
-}
-
-
-void sendData(const char *data, int size) {
-  Serial.write((const uint8_t *)data, size);
-}
-
-
-// -------------------------------------------------------------------------------------------------
-// High-level ArduDOS
-// -------------------------------------------------------------------------------------------------
-
-
 // Some versions of Arduino appear to have problems with the FRESULT type in the print_ff_error
 // function - which reportedly can be fixed by putting a forward declaration here (thanks to rtrimbler!).
 // I am not able to reproduce the error but adding a forward declaration can't hurt.
@@ -202,106 +170,8 @@ void print_ff_error(FRESULT fr) {
 // -------------------------------------------------------------------------------------------------
 
 
-#ifdef USE_MONITOR
 
-// re-use the FatFs data buffer if ARDUDOS is enabled (to save RAM)
-// #ifdef USE_ARDUDOS
-// #define databuffer FatFs.win
-// #else
-
-// static byte databuffer[1024 + 3];
 static char *databuffer = nullptr;
-
-// #endif
-
-
-#ifdef USE_XMODEM
-
-#include "XModem.h"
-
-byte xmodem_status_mon = S_OK;
-bool xmodem_verify = false;
-word xmodem_sector = 0, xmodem_data_ptr = 0xFFFF;
-
-
-bool xmodemHandlerSendMon(unsigned long no, char *data, int size) {
-  if (xmodem_data_ptr >= 512) {
-    byte numsec = ArduinoFDC.numSectors();
-    if (xmodem_sector >= 2 * numsec * ArduinoFDC.numTracks()) {
-      xmodem_status_mon = S_OK;
-      return false;
-    }
-
-    byte head = 0;
-    byte track = xmodem_sector / (numsec * 2);
-    byte sector = xmodem_sector % (numsec * 2);
-    if (sector >= numsec) {
-      head = 1;
-      sector -= numsec;
-    }
-
-    byte r = S_NOHEADER, retry = 5;
-    while (retry > 0 && r != S_OK) {
-      r = ArduinoFDC.readSector(track, head, sector + 1, databuffer);
-      retry--;
-    }
-    if (r != S_OK) {
-      xmodem_status_mon = r;
-      return false;
-    }
-
-    xmodem_data_ptr = 0;
-    xmodem_sector++;
-  }
-
-  // "size" is always 128 and sector length is 512, i.e. a multiple of "size"
-  // readSector returns data in databuffer[1..512]
-  memcpy(data, databuffer + 1 + xmodem_data_ptr, size);
-  xmodem_data_ptr += size;
-  return true;
-}
-
-
-bool xmodemHandlerReceiveMon(unsigned long no, char *data, int size) {
-  // "size" is always 128 and sector length is 512, i.e. a multiple of "size"
-  // writeSector expects data in databuffer[1..512]
-  memcpy(databuffer + 1 + xmodem_data_ptr, data, size);
-  xmodem_data_ptr += size;
-
-  if (xmodem_data_ptr >= 512) {
-    byte numsec = ArduinoFDC.numSectors();
-    if (xmodem_sector >= 2 * numsec * ArduinoFDC.numTracks()) {
-      xmodem_status_mon = S_OK;
-      return false;
-    }
-
-    byte head = 0;
-    byte track = xmodem_sector / (numsec * 2);
-    byte sector = xmodem_sector % (numsec * 2);
-    if (sector >= numsec) {
-      head = 1;
-      sector -= numsec;
-    }
-
-    byte r = S_NOHEADER, retry = 5;
-    while (retry > 0 && r != S_OK) {
-      r = ArduinoFDC.writeSector(track, head, sector + 1, databuffer, xmodem_verify);
-      retry--;
-    }
-    if (r != S_OK) {
-      xmodem_status_mon = r;
-      return false;
-    }
-
-    xmodem_data_ptr = 0;
-    xmodem_sector++;
-  }
-
-  return true;
-}
-
-#endif
-
 
 void monitor() {
   char cmd;
@@ -351,41 +221,6 @@ void monitor() {
       } else
         Serial.println(F("Invalid sector specification"));
       ArduinoFDC.motorOff();
-    } else if (cmd == 'r' && n == 1) {
-      ArduinoFDC.motorOn();
-      for (track = 0; track < ArduinoFDC.numTracks(); track++)
-        for (head = 0; head < ArduinoFDC.numHeads(); head++) {
-          sector = 1;
-          for (byte i = 0; i < ArduinoFDC.numSectors(); i++) {
-            byte attempts = 0;
-            while (true) {
-              Serial.print(F("Reading track "));
-              Serial.print(track);
-              Serial.print(F(" sector "));
-              Serial.print(sector);
-              Serial.print(F(" side "));
-              Serial.print(head);
-              Serial.flush();
-              byte status = ArduinoFDC.readSector(track, head, sector, databuffer);
-              if (status == S_OK) {
-                Serial.println(F(" => ok"));
-                break;
-              } else if ((status == S_INVALIDID || status == S_CRC) && (attempts++ < 10))
-                Serial.println(F(" => CRC error, trying again"));
-              else {
-                Serial.print(F(" => "));
-                Serial.println("shouldn't be this one");
-                print_error(status);
-                break;
-              }
-            }
-
-            sector += 2;
-            if (sector > ArduinoFDC.numSectors()) sector = 2;
-          }
-        }
-      ArduinoFDC.motorOff();
-
     } else if (cmd == 'w' && n >= 3) {
       ArduinoFDC.motorOn();
       track = a1;
@@ -464,56 +299,6 @@ void monitor() {
         memset(databuffer, 0, 513);
       }
     }
-#ifdef USE_XMODEM
-    else if (cmd == 'R') {
-      Serial.println(F("Send image via XModem now..."));
-      xmodem_status_mon = S_OK;
-      xmodem_sector = 0;
-      xmodem_data_ptr = 0;
-      xmodem_verify = n > 1 && (a1 != 0);
-
-      XModem modem(recvChar, sendData, xmodemHandlerReceiveMon);
-      if (modem.receive() && xmodem_status_mon == S_OK)
-        Serial.println(F("\r\nSuccess!"));
-      else {
-        unsigned long t = millis() + 500;
-        while (millis() < t) {
-          if (Serial.read() >= 0) t = millis() + 500;
-        }
-        while (Serial.read() < 0)
-          ;
-
-        Serial.println('\r');
-        if (xmodem_status_mon != S_OK) print_error(xmodem_status_mon);
-      }
-    } else if (cmd == 'S') {
-      Serial.println(F("Receive image via XModem now..."));
-      xmodem_status_mon = S_OK;
-      xmodem_sector = 0;
-      xmodem_data_ptr = 0xFFFF;
-
-      XModem modem(recvChar, sendData, xmodemHandlerSendMon);
-      if (modem.transmit() && xmodem_status_mon == S_OK)
-        Serial.println(F("\r\nSuccess!"));
-      else {
-        unsigned long t = millis() + 500;
-        while (millis() < t) {
-          if (Serial.read() >= 0) t = millis() + 500;
-        }
-        while (Serial.read() < 0)
-          ;
-
-        Serial.println('\r');
-        if (xmodem_status_mon != S_OK) print_error(xmodem_status_mon);
-      }
-    }
-#endif
-#ifdef USE_ARDUDOS
-    else if (cmd == 'x')
-      return;
-#endif
-#if !defined(USE_ARDUDOS) || !defined(USE_MONITOR) || !defined(USE_XMODEM) || defined(__AVR_ATmega2560__)
-    // must save flash space if all three of ARDUDOS/MONITR/XMODEM are enabled on UNO
     else if (cmd == 'h' || cmd == '?') {
       Serial.println(F("Commands (t=track (0-based), s=sector (1-based), h=head (0/1)):"));
       Serial.println(F("r t,s,h  Read sector to buffer and print buffer"));
@@ -526,21 +311,11 @@ void monitor() {
       Serial.println(F("s 0/1    Select drive A/B"));
       Serial.println(F("t 0-4    Set type of current drive (5.25DD/5.25DDinHD/5.25HD/3.5DD/3.5HD)"));
       Serial.println(F("f        Low-level format disk (tf)"));
-#ifdef USE_XMODEM
-      Serial.println(F("S        Read disk image and send via XModem"));
-      Serial.println(F("R [0/1]  Receive disk image via XModem and write to disk (without/with verify)"));
-#endif
-#ifdef USE_ARDUDOS
-      Serial.println(F("x        Exit monitor\n"));
-#endif
     }
-#endif
     else
       Serial.println(F("Invalid command"));
   }
 }
-
-#endif
 
 
 // -------------------------------------------------------------------------------------------------
@@ -555,11 +330,5 @@ void setup() {
 
 
 void loop() {
-#if defined(USE_ARDUDOS)
-  arduDOS();
-#elif defined(USE_MONITOR)
   monitor();
-#else
-#error "Need at least one of USE_ARDUDOS and USE_MONITOR"
-#endif
 }

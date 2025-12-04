@@ -50,12 +50,8 @@ void print_hex(byte b) {
 
 
 void dump_buffer(int offset, byte *buf, int n) {
-  int i = 0;
-  while (i < n) {
-    for (int j = 0; j < 16; j++) {
-      if (i + j < n) print_hex(buf[i + j]);
-    }
-    i += 16;
+  for (int i = 0; i < n; ++i) {
+    print_hex(buf[i]);
   }
 }
 
@@ -67,22 +63,16 @@ char *read_user_cmd(void *buffer, int buflen) {
     int i = Serial.read();
 
     if ((i == 13 || i == 10)) {
-      Serial.println();
       break;
     } else if (i == 27) {
       l = 0;
-      Serial.println();
       break;
     } else if (i == 8) {
       if (l > 0) {
-        Serial.write(8);
-        Serial.write(' ');
-        Serial.write(8);
         l--;
       }
     } else if (isprint(i) && l < buflen - 1) {
       buf[l++] = i;
-      Serial.write(i);
     }
 
     if (motor_timeout > 0 && millis() > motor_timeout) {
@@ -343,7 +333,7 @@ void monitor() {
       ArduinoFDC.motorOn();
       track = a1;
       sector = a2;
-      head = (n == 3) ? 0 : a3;
+      head = a3;
       if (head >= 0 && head < 2 && track >= 0 && track < ArduinoFDC.numTracks() && sector >= 1 && sector <= ArduinoFDC.numSectors()) {
         // Serial.print(F("Reading track ")); Serial.print(track);
         // Serial.print(F(" sector ")); Serial.print(sector);
@@ -400,7 +390,7 @@ void monitor() {
       ArduinoFDC.motorOn();
       track = a1;
       sector = a2;
-      head = (n >= 3) ? 0 : a3;
+      head = a3;
       if (head >= 0 && head < 2 && track >= 0 && track < ArduinoFDC.numTracks() && sector >= 1 && sector <= ArduinoFDC.numSectors()) {
         // Serial.print(F("Writing and verifying track ")); Serial.print(track);
         // Serial.print(F(" sector ")); Serial.print(sector);
@@ -416,8 +406,6 @@ void monitor() {
             firstNibble = false;
           } else {
             tempByte |= hextoint(databuffer[inIdx++]);
-            // Serial.print((int)tempByte);
-            // Serial.print(" ");
             databuffer[outIdx++] = tempByte;
             tempByte = 0;
             firstNibble = true;
@@ -431,6 +419,9 @@ void monitor() {
           Serial.println(F("Error:"));
           print_error(status);
         }
+        // send 'z' when done writing
+        Serial.println('z');
+        Serial.flush();
       } else
         Serial.println(F("Invalid sector specification"));
       ArduinoFDC.motorOff();

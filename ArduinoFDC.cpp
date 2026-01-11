@@ -226,9 +226,8 @@ static struct DriveGeometryStruct geometry[7] =
     {2, 80, 18, 100, 1}   // 3.5"  HD (1.44 MB)
   };
 
-
 // un-commenting this will write more detailed error information to Serial
-//#define DEBUG
+// #define DEBUG
 
 ArduinoFDCClass ArduinoFDC;
 static byte header[7];
@@ -1280,7 +1279,7 @@ ArduinoFDCClass::ArduinoFDCClass()
 }
 
 
-void ArduinoFDCClass::begin(enum DriveType driveAType, enum DriveType driveBType)
+void ArduinoFDCClass::begin(enum DiskType driveAType, enum DiskType driveBType)
 {
   // make sure all outputs pins are HIGH when we switch them to output mode
   digitalWrite(PIN_STEP,      LOW);
@@ -1347,13 +1346,13 @@ void ArduinoFDCClass::end()
 }
 
 
-void ArduinoFDCClass::setDriveType(enum DriveType type)
+void ArduinoFDCClass::setDriveType(enum DiskType type)
 {
   ArduinoFDCClass::setDriveType(m_currentDrive, type);
 }
 
 
-void ArduinoFDCClass::setDriveType(byte drive, enum DriveType type)
+void ArduinoFDCClass::setDriveType(byte drive, enum DiskType type)
 {
   if( type != m_driveType[drive] )
     {
@@ -1373,13 +1372,13 @@ void ArduinoFDCClass::setDriveType(byte drive, enum DriveType type)
 }
 
 
-enum ArduinoFDCClass::DriveType ArduinoFDCClass::getDriveType() const
+enum ArduinoFDCClass::DiskType ArduinoFDCClass::getDriveType() const
 {
   return getDriveType(m_currentDrive);
 }
 
 
-enum ArduinoFDCClass::DriveType ArduinoFDCClass::getDriveType(byte drive) const
+enum ArduinoFDCClass::DiskType ArduinoFDCClass::getDriveType(byte drive) const
 {
   return m_driveType[drive];
 }
@@ -1473,6 +1472,33 @@ byte ArduinoFDCClass::getBitLength()
   return m_bitLength[m_currentDrive];
 }
 
+ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType){
+  Serial.println("checking");
+  driveSelect(LOW);
+  switch(driveType){
+    case DriveType::Drive3p5in:{
+      if( wait_header(32, 0, 0, 80) == S_OK){
+        Serial.println("3.5\" HD");
+        return DiskType::DT_3_HD;
+      }else{
+        Serial.println("3.5\" DD");
+        return DiskType::DT_3_DD;
+      }
+    }
+    case DriveType::Drive5p25in_HD:{
+      // todo
+      return DiskType::DT_5_HD;
+    }
+    case DriveType::Drive5p25in_DD:{
+        Serial.println("5.25\" DD");
+      return DiskType::DT_5_DD;
+    }
+    default:
+      Serial.println("Invalid drive type in detectDiskType");
+    return DiskType::MAX;
+
+  }
+}
 
 byte ArduinoFDCClass::readSector(byte track, byte side, byte sector, byte *buffer)
 {

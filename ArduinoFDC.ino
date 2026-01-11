@@ -125,12 +125,12 @@ void print_error(byte n) {
 
 
 void set_drive_type(int n) {
-  ArduinoFDC.setDriveType((ArduinoFDCClass::DriveType)n);
-  Serial.print(F("Setting disk type for drive "));
-  Serial.write('A' + ArduinoFDC.selectedDrive());
-  Serial.print(F(" to "));
-  print_drive_type(ArduinoFDC.getDriveType());
-  Serial.println();
+  ArduinoFDC.setDriveType((ArduinoFDCClass::DiskType)n);
+  // Serial.print(F("Setting disk type for drive "));
+  // Serial.write('A' + ArduinoFDC.selectedDrive());
+  // Serial.print(F(" to "));
+  // print_drive_type(ArduinoFDC.getDriveType());
+  // Serial.println();
 }
 
 
@@ -171,7 +171,7 @@ void print_ff_error(FRESULT fr) {
 
 
 
-static char *databuffer = nullptr;
+static byte *databuffer = nullptr;
 
 void monitor() {
   char cmd;
@@ -192,7 +192,7 @@ void monitor() {
     cmdPtr = read_user_cmd(tempbuffer, TEMPBUFFER_SIZE);
     n = sscanf(cmdPtr, "%c%i,%i,%i%n", &cmd, &a1, &a2, &a3, &numCharsRead);
     if (cmd == 'w') {
-      databuffer = cmdPtr + numCharsRead + 1;
+      databuffer =(byte*)(cmdPtr + numCharsRead + 1);
     } else {
       databuffer = tempbuffer;
     }
@@ -292,21 +292,29 @@ void monitor() {
     } else if (cmd == 't' && n > 1) {
       set_drive_type(a1);
     } else if (cmd == 'f') {
-      if (confirm_formatting()) {
+      // if (confirm_formatting()) {
         Serial.println(F("Formatting disk..."));
         byte status = ArduinoFDC.formatDisk(databuffer, n > 1 ? a1 : 0, n > 2 ? a2 : 255);
         if (status != S_OK) print_error(status);
         memset(databuffer, 0, 513);
+      // }
+    } else if( cmd == 'd'){
+      bool alreadyRunning = ArduinoFDC.motorRunning();
+      if(!alreadyRunning){
+        ArduinoFDC.motorOn();
+      }
+      ArduinoFDC.motorOn();
+      Serial.print("Detected disk type: ");
+      Serial.print((int)ArduinoFDC.detectDiskType(ArduinoFDCClass::DriveType::Drive5p25in_HD));
+      Serial.println();
+      if(!alreadyRunning){
+        ArduinoFDC.motorOff();
       }
     }
     else if (cmd == 'h' || cmd == '?') {
       Serial.println(F("Commands (t=track (0-based), s=sector (1-based), h=head (0/1)):"));
       Serial.println(F("r t,s,h  Read sector to buffer and print buffer"));
-      Serial.println(F("r        Read ALL sectors and print pass/fail"));
-      Serial.println(F("w t,s,h  Write buffer to sector"));
-      Serial.println(F("w [0/1]  Write buffer to ALL sectors (without/with verify)"));
-      Serial.println(F("b        Print buffer"));
-      Serial.println(F("B [n]    Fill buffer with 'n' or 00..FF if n not given"));
+      Serial.println(F("w t,s,h,data  Write buffer to sector"));
       Serial.println(F("m 0/1    Turn drive motor off/on"));
       Serial.println(F("s 0/1    Select drive A/B"));
       Serial.println(F("t 0-4    Set type of current drive (5.25DD/5.25DDinHD/5.25HD/3.5DD/3.5HD)"));
@@ -325,7 +333,7 @@ void monitor() {
 
 void setup() {
   Serial.begin(115200);
-  ArduinoFDC.begin(ArduinoFDCClass::DT_3_HD, ArduinoFDCClass::DT_3_HD);
+  ArduinoFDC.begin(ArduinoFDCClass::DT_5_DDonHD, ArduinoFDCClass::DT_5_DDonHD);
 }
 
 

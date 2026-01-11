@@ -38,12 +38,20 @@ class ArduinoFDCClass
 {
  public:
 
-  enum DriveType {
+  enum DiskType {
     DT_5_DD,     // 5.25" double density (360 KB) 
+    MIN = DT_5_DD,
     DT_5_DDonHD, // 5.25" double density disk in high density drive (360 KB)
     DT_5_HD,     // 5.25" high density (1.2 MB)
     DT_3_DD,     // 3.5"  double density (720 KB)
-    DT_3_HD      // 3.5"  high density (1.44 MB)
+    DT_3_HD,      // 3.5"  high density (1.44 MB)
+    MAX
+  };
+
+  enum class DriveType {
+    Drive3p5in,
+    Drive5p25in_HD,
+    Drive5p25in_DD
   };
 
   enum DensityPinMode {
@@ -53,9 +61,11 @@ class ArduinoFDCClass
   };
   
   ArduinoFDCClass();
+
+  ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType);
   
   // Initialize pins used for controlling the disk drive
-  void begin(enum DriveType driveAType = DT_3_HD, enum DriveType driveBType = DT_3_HD);
+  void begin(enum DiskType driveAType = DT_3_HD, enum DiskType driveBType = DT_3_HD);
 
   // Release pins used for controlling the disk drive
   void end();
@@ -67,12 +77,12 @@ class ArduinoFDCClass
   byte selectedDrive() const;
 
   // set the drive type for the currently selected drive
-  void setDriveType(enum DriveType type);
-  void setDriveType(byte drive, enum DriveType type);
+  void setDriveType(enum DiskType type);
+  void setDriveType(byte drive, enum DiskType type);
 
   // get the type of the currently selected drive
-  enum DriveType getDriveType() const;
-  enum DriveType getDriveType(byte drive) const;
+  enum DiskType getDriveType() const;
+  enum DiskType getDriveType(byte drive) const;
 
   // returns true if a disk is detected in the drive
   bool haveDisk() const;
@@ -136,7 +146,7 @@ class ArduinoFDCClass
   void setDensityPin();
   byte getBitLength();
 
-  enum DriveType m_driveType[2];
+  enum DiskType m_driveType[2];
   enum DensityPinMode m_densityPinMode[2];
   byte m_currentDrive, m_bitLength[2];
   bool m_initialized, m_motorState[2];

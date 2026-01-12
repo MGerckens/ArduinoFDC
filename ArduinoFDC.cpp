@@ -1479,22 +1479,8 @@ byte ArduinoFDCClass::getBitLength(DiskType type)
 }
 
 ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType){
-  Serial.println("checking");
   ArduinoFDCClass::DiskType returnValue;
-  
-  bool turnMotorOff = false;
-  if( !motorRunning() )
-    {
-      turnMotorOff = true;
-      motorOn();
-    }
-  driveSelect(LOW);
-  // set up timer
-  TCCRA = 0;
-  TCCRB = bit(CS0); // falling edge input capture, prescaler 1, no output compare
-  TCCRC = 0;
-  noInterrupts();
-  
+
   static byte temp[516];
   DiskType currentDiskType = getDiskType();
   switch(driveType){
@@ -1530,14 +1516,6 @@ ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType){
   }
   setDiskType(currentDiskType);
 
-  interrupts();
-  driveSelect(HIGH);
-  // stop timer
-  TCCRB = 0;
-  if( turnMotorOff ) motorOff();
-
-  Serial.print("detected type ");
-  Serial.println((int)returnValue);
   return returnValue;
 }
 

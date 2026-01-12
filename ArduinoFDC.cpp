@@ -693,7 +693,7 @@ static void write_data(byte bitlen, byte *buffer, unsigned int n)
 
 
 
-static byte format_track(byte *buffer, byte driveType, byte bitlen, byte track, byte side, byte interleave)
+static byte format_track(byte *buffer, byte diskType, byte bitlen, byte track, byte side, byte interleave)
 {
   // 3.5" DD disk:
   //   writing 95 + 1 + 65 + (7 + 37 + 515 + 69) * 8 + (7 + 37 + 515) bytes
@@ -708,8 +708,8 @@ static byte format_track(byte *buffer, byte driveType, byte bitlen, byte track, 
   //   => 100000 bits unformatted capacity per track
   byte i;
 
-  byte numsec     = geometry[driveType].numSectors;
-  byte datagaplen = geometry[driveType].dataGap;
+  byte numsec     = geometry[diskType].numSectors;
+  byte datagaplen = geometry[diskType].dataGap;
 
   // pre-compute ID records
   memset(buffer, 0, 8*numsec);
@@ -1200,18 +1200,18 @@ static bool step_to_track0()
 }
 
 
-static void step_tracks(byte driveType, int tracks)
+static void step_tracks(byte diskType, int tracks)
 {
   // if tracks<0 then step outward (outward towards track 0) otherwise step inward
   digitalWriteOC(PIN_STEPDIR, tracks<0 ? HIGH : LOW);
   tracks = abs(tracks);
-  tracks = tracks * geometry[driveType].trackSpacing;
+  tracks = tracks * geometry[diskType].trackSpacing;
   while( tracks-->0 ) step_track();
   delay(100); 
 }
 
 
-static byte find_sector(byte driveType, byte bitLength, byte track, byte side, byte sector)
+static byte find_sector(byte diskType, byte bitLength, byte track, byte side, byte sector)
 {
   // select side
   digitalWriteOC(PIN_SIDE, side>0 ? LOW : HIGH);
@@ -1223,11 +1223,11 @@ static byte find_sector(byte driveType, byte bitLength, byte track, byte side, b
   if( res==S_OK && header[1]!=track )
     {
       // make sure that the track number in the header we read is sensible
-      if( header[1]<geometry[driveType].numTracks )
+      if( header[1]<geometry[diskType].numTracks )
         {
           // need interrupts for delay() when stepping
           interrupts();
-          step_tracks(driveType, track-header[1]);
+          step_tracks(diskType, track-header[1]);
           noInterrupts();
 
           res = wait_header(bitLength, track, side, sector);
@@ -1243,7 +1243,7 @@ static byte find_sector(byte driveType, byte bitLength, byte track, byte side, b
       interrupts();
       if( step_to_track0() )
         {
-          step_tracks(driveType, track);
+          step_tracks(diskType, track);
           noInterrupts();
           res = wait_header(bitLength, track, side, sector);
         }
@@ -1267,8 +1267,8 @@ ArduinoFDCClass::ArduinoFDCClass()
   m_currentDrive  = 0;
   m_motorState[0] = false;
   m_motorState[1] = false; 
-  m_driveType[0]  = DT_3_HD;
-  m_driveType[1]  = DT_3_HD;
+  m_diskType[0]  = DT_3_HD;
+  m_diskType[1]  = DT_3_HD;
   m_bitLength[0]  = 0;
   m_bitLength[1]  = 0;
 
@@ -1279,7 +1279,7 @@ ArduinoFDCClass::ArduinoFDCClass()
 }
 
 
-void ArduinoFDCClass::begin(enum DiskType driveAType, enum DiskType driveBType)
+void ArduinoFDCClass::begin(DriveType driveAType, DriveType driveBType)
 {
   // make sure all outputs pins are HIGH when we switch them to output mode
   digitalWrite(PIN_STEP,      LOW);
@@ -1315,7 +1315,7 @@ void ArduinoFDCClass::begin(enum DiskType driveAType, enum DiskType driveBType)
 #if defined(PIN_DSKCHG)
   pinMode(PIN_DSKCHG,    INPUT_PULLUP);
 #endif
-
+ 
 #if defined(PIN_DENSITY)
   digitalWrite(PIN_DENSITY, LOW);
   pinMode(PIN_DENSITY, INPUT);
@@ -1326,11 +1326,14 @@ void ArduinoFDCClass::begin(enum DiskType driveAType, enum DiskType driveBType)
   m_motorState[0] = false;
   m_motorState[1] = false;
 
-  m_currentDrive  = 1;
-  setDriveType(driveBType);
-  m_currentDrive  = 0;
-  setDriveType(driveAType);
+  
   m_initialized   = true;
+#if defined(PIN_MOTORB) && defined(PIN_SELECTB)
+  m_currentDrive  = 1;
+  setDiskType(detectDiskType(driveBType));
+#endif
+  m_currentDrive  = 0;
+  setDiskType(detectDiskType(driveAType));
 }
 
 
@@ -1346,17 +1349,17 @@ void ArduinoFDCClass::end()
 }
 
 
-void ArduinoFDCClass::setDriveType(enum DiskType type)
+void ArduinoFDCClass::setDiskType(enum DiskType type)
 {
-  ArduinoFDCClass::setDriveType(m_currentDrive, type);
+  ArduinoFDCClass::setDiskType(m_currentDrive, type);
 }
 
 
-void ArduinoFDCClass::setDriveType(byte drive, enum DiskType type)
+void ArduinoFDCClass::setDiskType(byte drive, enum DiskType type)
 {
-  if( type != m_driveType[drive] )
+  if( type != m_diskType[drive] )
     {
-      m_driveType[drive] = type;
+      m_diskType[drive] = type;
 
       // by default: 3.5"     drives do not use DENSITY pin (disconnect)
       //             5.25  DD drives do not use DENSITY pin (disconnect)
@@ -1372,15 +1375,15 @@ void ArduinoFDCClass::setDriveType(byte drive, enum DiskType type)
 }
 
 
-enum ArduinoFDCClass::DiskType ArduinoFDCClass::getDriveType() const
+enum ArduinoFDCClass::DiskType ArduinoFDCClass::getDiskType() const
 {
-  return getDriveType(m_currentDrive);
+  return getDiskType(m_currentDrive);
 }
 
 
-enum ArduinoFDCClass::DiskType ArduinoFDCClass::getDriveType(byte drive) const
+enum ArduinoFDCClass::DiskType ArduinoFDCClass::getDiskType(byte drive) const
 {
-  return m_driveType[drive];
+  return m_diskType[drive];
 }
 
 
@@ -1396,7 +1399,7 @@ void ArduinoFDCClass::setDensityPinMode(enum DensityPinMode mode)
 void ArduinoFDCClass::setDensityPin()
 {
 #if defined(PIN_DENSITY)
-  byte isHD = m_driveType[m_currentDrive]==DT_3_HD || m_driveType[m_currentDrive]==DT_5_HD;
+  byte isHD = m_diskType[m_currentDrive]==DT_3_HD || m_diskType[m_currentDrive]==DT_5_HD;
   switch( m_densityPinMode[m_currentDrive] )
     {
     case DP_OUTPUT_LOW_FOR_DD:
@@ -1423,47 +1426,50 @@ void ArduinoFDCClass::driveSelect(bool state) const
 #endif
 }
 
+static byte get_5p25_DD_on_HD_bit_length(){
+  TCCRA = 0;
+  TCCRB = bit(CS0);  // start timer with /1 prescaler
+  TCCRC = 0;
 
-byte ArduinoFDCClass::getBitLength()
+  // return with error if index hole can't be found
+  if( !wait_index_hole() ) return 0;
+
+  // switch timer to /64 prescaler
+  TCCRB = bit(CS0) | bit(CS1);
+
+  // build average tick count (4us/tick) over 4 revolutions
+  unsigned long l = 0;
+  for(byte i=0; i<4; i++)
+    {
+      if( !wait_index_hole() ) return 0;
+      l += TCNT;
+    }
+
+  TCCRB = 0; // turn off timer
+
+  // for 300 RPM (200 ms/rotation) data rate is 250 mbps => 32 cycles/bit
+  // for 360 RPM (166 ms/rotation) data rate is 300 mbps => 27 cycles/bit
+  return l > 180000 ? 32 : 27;
+}
+
+byte ArduinoFDCClass::getBitLength(){
+  return getBitLength(m_diskType[m_currentDrive]);
+}
+
+byte ArduinoFDCClass::getBitLength(DiskType type)
 {
   if( m_bitLength[m_currentDrive] == 0 )
     {
       byte bitLength;
 
-      switch( m_driveType[m_currentDrive] )
+      switch( type )
         {
         case DT_3_HD: bitLength = 16; break;
         case DT_3_DD: bitLength = 32; break;
         case DT_5_HD: bitLength = 16; break;
         case DT_5_DD: bitLength = 32; break;
 
-        case DT_5_DDonHD:
-          {
-            TCCRA = 0;
-            TCCRB = bit(CS0);  // start timer with /1 prescaler
-            TCCRC = 0;
-
-            // return with error if index hole can't be found
-            if( !wait_index_hole() ) return 0;
-
-            // switch timer to /64 prescaler
-            TCCRB = bit(CS0) | bit(CS1);
-
-            // build average tick count (4us/tick) over 4 revolutions
-            unsigned long l = 0;
-            for(byte i=0; i<4; i++)
-              {
-                if( !wait_index_hole() ) return 0;
-                l += TCNT;
-              }
-
-            TCCRB = 0; // turn off timer
-
-            // for 300 RPM (200 ms/rotation) data rate is 250 mbps => 32 cycles/bit
-            // for 360 RPM (166 ms/rotation) data rate is 300 mbps => 27 cycles/bit
-            bitLength = l > 180000 ? 32 : 27;
-            break;
-          }
+        case DT_5_DDonHD: bitLength = get_5p25_DD_on_HD_bit_length(); break;
         }
 
       m_bitLength[m_currentDrive] = bitLength;
@@ -1474,41 +1480,76 @@ byte ArduinoFDCClass::getBitLength()
 
 ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType){
   Serial.println("checking");
+  ArduinoFDCClass::DiskType returnValue;
+  
+  bool turnMotorOff = false;
+  if( !motorRunning() )
+    {
+      turnMotorOff = true;
+      motorOn();
+    }
   driveSelect(LOW);
+  // set up timer
+  TCCRA = 0;
+  TCCRB = bit(CS0); // falling edge input capture, prescaler 1, no output compare
+  TCCRC = 0;
+  noInterrupts();
+  
+  static byte temp[516];
+  DiskType currentDiskType = getDiskType();
   switch(driveType){
     case DriveType::Drive3p5in:{
-      if( wait_header(32, 0, 0, 80) == S_OK){
-        Serial.println("3.5\" HD");
-        return DiskType::DT_3_HD;
+      setDiskType(DiskType::DT_3_HD);
+      if( readSector(79,0,1,temp) == S_OK){
+        returnValue = DiskType::DT_3_HD;
+        break;
       }else{
-        Serial.println("3.5\" DD");
-        return DiskType::DT_3_DD;
+        returnValue = DiskType::DT_3_DD;
+        break;
       }
     }
     case DriveType::Drive5p25in_HD:{
-      // todo
-      return DiskType::DT_5_HD;
+      setDiskType(DiskType::DT_5_HD);
+      if( readSector(79,0,1,temp) == S_OK){
+        returnValue =  DiskType::DT_5_HD;
+        break;
+      }else{
+        returnValue = DiskType::DT_5_DDonHD;
+        break;
+      }
+        returnValue =  DiskType::DT_5_HD;
+        break;
     }
     case DriveType::Drive5p25in_DD:{
-        Serial.println("5.25\" DD");
-      return DiskType::DT_5_DD;
+      returnValue = DiskType::DT_5_DD;
+      break;
     }
     default:
       Serial.println("Invalid drive type in detectDiskType");
-    return DiskType::MAX;
-
+      returnValue = DiskType::MAX;
   }
+  setDiskType(currentDiskType);
+
+  interrupts();
+  driveSelect(HIGH);
+  // stop timer
+  TCCRB = 0;
+  if( turnMotorOff ) motorOff();
+
+  Serial.print("detected type ");
+  Serial.println((int)returnValue);
+  return returnValue;
 }
 
 byte ArduinoFDCClass::readSector(byte track, byte side, byte sector, byte *buffer)
 {
   byte res = S_OK;
-  byte driveType = m_driveType[m_currentDrive];
+  byte diskType = m_diskType[m_currentDrive];
 
   // do some sanity checks
   if( !m_initialized )
     return S_NOTINIT;
-  else if( track>=geometry[driveType].numTracks || sector<1 || sector>geometry[driveType].numSectors || side>1 )
+  else if( track>=geometry[diskType].numTracks || sector<1 || sector>geometry[diskType].numSectors || side>1 )
     return S_NOHEADER;
 
   // if motor is not running then turn it on now
@@ -1538,7 +1579,7 @@ byte ArduinoFDCClass::readSector(byte track, byte side, byte sector, byte *buffe
       noInterrupts();
 
       // find the requested sector
-      res = find_sector(driveType, bitLength, track, side, sector);
+      res = find_sector(diskType, bitLength, track, side, sector);
       
       // if we found the sector then read the data
       if( res==S_OK )
@@ -1581,16 +1622,15 @@ byte ArduinoFDCClass::readSector(byte track, byte side, byte sector, byte *buffe
   return res;
 }
 
-
 byte ArduinoFDCClass::writeSector(byte track, byte side, byte sector, byte *buffer, bool verify)
 {
   byte res = S_OK;
-  byte driveType = m_driveType[m_currentDrive];
+  byte diskType = m_diskType[m_currentDrive];
 
   // do some sanity checks
   if( !m_initialized )
     return S_NOTINIT;
-  else if( track>=geometry[driveType].numTracks || sector<1 || sector>geometry[driveType].numSectors || side>1 )
+  else if( track>=geometry[diskType].numTracks || sector<1 || sector>geometry[diskType].numSectors || side>1 )
     return S_NOHEADER;
 
   // if motor is not running then turn it on now
@@ -1630,7 +1670,7 @@ byte ArduinoFDCClass::writeSector(byte track, byte side, byte sector, byte *buff
       noInterrupts();
 
       // find the requested sector
-      res = find_sector(driveType, bitLength, track, side, sector);
+      res = find_sector(diskType, bitLength, track, side, sector);
 
       // if we found the sector then write the data
       if( res==S_OK )
@@ -1665,12 +1705,11 @@ byte ArduinoFDCClass::writeSector(byte track, byte side, byte sector, byte *buff
   return res;
 }
 
-
 byte ArduinoFDCClass::formatDisk(byte *buffer, byte fromTrack, byte toTrack, byte interleave)
 {
   byte res = S_OK;
-  byte driveType = m_driveType[m_currentDrive];
-  byte numTracks = geometry[driveType].numTracks;
+  byte diskType = m_diskType[m_currentDrive];
+  byte numTracks = geometry[diskType].numTracks;
 
   // do some sanity checks
   if( !m_initialized )
@@ -1705,18 +1744,18 @@ byte ArduinoFDCClass::formatDisk(byte *buffer, byte fromTrack, byte toTrack, byt
     res = S_NOTRACK0;
   else
     {
-      if( fromTrack>0 ) step_tracks(driveType, fromTrack);
+      if( fromTrack>0 ) step_tracks(diskType, fromTrack);
       if( toTrack>=numTracks ) toTrack = numTracks-1;
       for(byte track=fromTrack; track<=toTrack; track++)
         {
           digitalWriteOC(PIN_SIDE, HIGH);
-          res = format_track(buffer, driveType, bitLength, track, 0, interleave); if( res!=S_OK ) break;
-          if( geometry[driveType].numHeads == 2 )
+          res = format_track(buffer, diskType, bitLength, track, 0, interleave); if( res!=S_OK ) break;
+          if( geometry[diskType].numHeads == 2 )
             {
               digitalWriteOC(PIN_SIDE, LOW);
-              res = format_track(buffer, driveType, bitLength, track, 1, interleave); if( res!=S_OK ) break;
+              res = format_track(buffer, diskType, bitLength, track, 1, interleave); if( res!=S_OK ) break;
             }
-          if( track+1<=toTrack ) step_tracks(driveType, 1);
+          if( track+1<=toTrack ) step_tracks(diskType, 1);
         }
     }
 
@@ -1830,7 +1869,7 @@ bool ArduinoFDCClass::diskChanged() const
   if( digitalRead(PIN_DSKCHG)==LOW )
     {
       // move drive head (clears "disk change" flag)
-      byte driveType = m_driveType[m_currentDrive];
+      byte driveType = m_diskType[m_currentDrive];
       if( digitalRead(PIN_TRACK0) )
         step_tracks(driveType, -1);
       else
@@ -1869,17 +1908,17 @@ byte ArduinoFDCClass::selectedDrive() const
 
 byte ArduinoFDCClass::numTracks() const
 {
-  return geometry[m_driveType[m_currentDrive]].numTracks;
+  return geometry[m_diskType[m_currentDrive]].numTracks;
 }
 
 
 byte ArduinoFDCClass::numSectors() const
 {
-  return geometry[m_driveType[m_currentDrive]].numSectors;
+  return geometry[m_diskType[m_currentDrive]].numSectors;
 }
 
 
 byte ArduinoFDCClass::numHeads() const
 {
-  return geometry[m_driveType[m_currentDrive]].numHeads;
+  return geometry[m_diskType[m_currentDrive]].numHeads;
 }

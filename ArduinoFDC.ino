@@ -125,11 +125,11 @@ void print_error(byte n) {
 
 
 void set_drive_type(int n) {
-  ArduinoFDC.setDriveType((ArduinoFDCClass::DiskType)n);
+  ArduinoFDC.setDiskType((ArduinoFDCClass::DiskType)n);
   // Serial.print(F("Setting disk type for drive "));
   // Serial.write('A' + ArduinoFDC.selectedDrive());
   // Serial.print(F(" to "));
-  // print_drive_type(ArduinoFDC.getDriveType());
+  // print_drive_type(ArduinoFDC.getDiskType());
   // Serial.println();
 }
 
@@ -299,17 +299,9 @@ void monitor() {
         memset(databuffer, 0, 513);
       // }
     } else if( cmd == 'd'){
-      bool alreadyRunning = ArduinoFDC.motorRunning();
-      if(!alreadyRunning){
-        ArduinoFDC.motorOn();
-      }
-      ArduinoFDC.motorOn();
       Serial.print("Detected disk type: ");
       Serial.print((int)ArduinoFDC.detectDiskType(ArduinoFDCClass::DriveType::Drive5p25in_HD));
       Serial.println();
-      if(!alreadyRunning){
-        ArduinoFDC.motorOff();
-      }
     }
     else if (cmd == 'h' || cmd == '?') {
       Serial.println(F("Commands (t=track (0-based), s=sector (1-based), h=head (0/1)):"));
@@ -333,7 +325,7 @@ void monitor() {
 
 void setup() {
   Serial.begin(115200);
-  ArduinoFDC.begin(ArduinoFDCClass::DT_5_DDonHD, ArduinoFDCClass::DT_5_DDonHD);
+  ArduinoFDC.begin(ArduinoFDCClass::DriveType::Drive5p25in_HD, ArduinoFDCClass::DriveType::Drive5p25in_HD);
 }
 
 

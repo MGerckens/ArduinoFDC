@@ -299,9 +299,11 @@ void monitor() {
         memset(databuffer, 0, 513);
       // }
     } else if( cmd == 'd'){
-      Serial.print("Detected disk type: ");
-      Serial.print((int)ArduinoFDC.detectDiskType(ArduinoFDCClass::DriveType::Drive5p25in_HD));
-      Serial.println();
+      ArduinoFDCClass::DiskType type = ArduinoFDC.detectDiskType(ArduinoFDCClass::DriveType::Drive5p25in_HD);
+      if(type != ArduinoFDCClass::DiskType::NONE){
+        ArduinoFDC.setDiskType(type);
+      }
+      Serial.println((int)type);
     }
     else if (cmd == 'h' || cmd == '?') {
       Serial.println(F("Commands (t=track (0-based), s=sector (1-based), h=head (0/1)):"));

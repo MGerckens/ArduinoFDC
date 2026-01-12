@@ -39,13 +39,12 @@ class ArduinoFDCClass
  public:
 
   enum DiskType {
+    NONE,
     DT_5_DD,     // 5.25" double density (360 KB) 
-    MIN = DT_5_DD,
     DT_5_DDonHD, // 5.25" double density disk in high density drive (360 KB)
     DT_5_HD,     // 5.25" high density (1.2 MB)
     DT_3_DD,     // 3.5"  double density (720 KB)
     DT_3_HD,      // 3.5"  high density (1.44 MB)
-    MAX
   };
 
   enum class DriveType {
@@ -104,7 +103,9 @@ class ArduinoFDCClass
 
   // set the density pin mode for the currently selected drive
   void setDensityPinMode(enum DensityPinMode mode);
-  
+
+  byte testForSector(byte track, byte side, byte sector);
+
   // Read a sector from disk,
   // buffer MUST have a size of at least 516 bytes. 
   // IMPORTANT: On successful return, the 512 bytes of sector data 

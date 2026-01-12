@@ -1481,30 +1481,34 @@ byte ArduinoFDCClass::getBitLength(DiskType type)
 ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType){
   ArduinoFDCClass::DiskType returnValue;
 
-  static byte temp[516];
   DiskType currentDiskType = getDiskType();
+  byte sectorResult;
   switch(driveType){
     case DriveType::Drive3p5in:{
       setDiskType(DiskType::DT_3_HD);
-      if( readSector(79,0,1,temp) == S_OK){
+      if((sectorResult = testForSector(79,0,1)), (sectorResult == S_OK)){
         returnValue = DiskType::DT_3_HD;
         break;
-      }else{
+      }else if(sectorResult == S_NOSYNC){
         returnValue = DiskType::DT_3_DD;
+        break;
+      }else{
+        returnValue = DiskType::NONE;
         break;
       }
     }
     case DriveType::Drive5p25in_HD:{
       setDiskType(DiskType::DT_5_HD);
-      if( readSector(79,0,1,temp) == S_OK){
+      if((sectorResult = testForSector(79,0,1)), (sectorResult == S_OK)){
         returnValue =  DiskType::DT_5_HD;
         break;
-      }else{
+      }else if(sectorResult == S_NOSYNC){
         returnValue = DiskType::DT_5_DDonHD;
         break;
-      }
-        returnValue =  DiskType::DT_5_HD;
+      }else{
+        returnValue = DiskType::NONE;
         break;
+      }
     }
     case DriveType::Drive5p25in_DD:{
       returnValue = DiskType::DT_5_DD;
@@ -1512,11 +1516,67 @@ ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType){
     }
     default:
       Serial.println("Invalid drive type in detectDiskType");
-      returnValue = DiskType::MAX;
+      returnValue = DiskType::NONE;
   }
   setDiskType(currentDiskType);
 
   return returnValue;
+}
+
+byte ArduinoFDCClass::testForSector(byte track, byte side, byte sector)
+{
+  byte res = S_OK;
+  byte diskType = m_diskType[m_currentDrive];
+
+  // do some sanity checks
+  if( !m_initialized )
+    return S_NOTINIT;
+  else if( track>=geometry[diskType].numTracks || sector<1 || sector>geometry[diskType].numSectors || side>1 )
+    return S_NOHEADER;
+
+  // if motor is not running then turn it on now
+  bool turnMotorOff = false;
+  if( !motorRunning() )
+    {
+      turnMotorOff = true;
+      motorOn();
+    }
+
+  // assert DRIVE_SELECT
+  driveSelect(LOW);
+
+  // get MFM bit length (in processor cycles, motor must be running for this)
+  byte bitLength = getBitLength();
+
+  if( bitLength==0 )
+    res = S_NOTREADY;
+  else
+    {
+      // set up timer
+      TCCRA = 0;
+      TCCRB = bit(CS0); // falling edge input capture, prescaler 1, no output compare
+      TCCRC = 0;
+      
+      // reading data is time sensitive so we can't have interrupts
+      noInterrupts();
+
+      // find the requested sector
+      res = find_sector(diskType, bitLength, track, side, sector);
+      
+      // interrupts are ok again
+      interrupts();
+
+      // stop timer
+      TCCRB = 0;
+    }
+
+  // de-assert DRIVE_SELECT
+  driveSelect(HIGH);
+
+  // if we turned the motor on then turn it off again
+  if( turnMotorOff ) motorOff();
+
+  return res;
 }
 
 byte ArduinoFDCClass::readSector(byte track, byte side, byte sector, byte *buffer)

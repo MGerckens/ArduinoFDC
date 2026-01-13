@@ -149,6 +149,7 @@ class ArduinoFDCClass
   byte getBitLength();
 
   enum DiskType m_diskType[2];
+  DriveType m_driveType[2];
   enum DensityPinMode m_densityPinMode[2];
   byte m_currentDrive, m_bitLength[2];
   bool m_initialized, m_motorState[2];

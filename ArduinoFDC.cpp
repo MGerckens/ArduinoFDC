@@ -1326,7 +1326,9 @@ void ArduinoFDCClass::begin(DriveType driveAType, DriveType driveBType)
   m_motorState[0] = false;
   m_motorState[1] = false;
 
-  
+  m_driveType[0] = driveAType;
+  m_driveType[1] = driveBType;
+
   m_initialized   = true;
 #if defined(PIN_MOTORB) && defined(PIN_SELECTB)
   m_currentDrive  = 1;
@@ -1581,6 +1583,9 @@ byte ArduinoFDCClass::testForSector(byte track, byte side, byte sector)
 
 byte ArduinoFDCClass::readSector(byte track, byte side, byte sector, byte *buffer)
 {
+  if(diskChanged()){
+    setDiskType(detectDiskType(m_driveType[m_currentDrive]));
+  }
   byte res = S_OK;
   byte diskType = m_diskType[m_currentDrive];
 
@@ -1662,6 +1667,9 @@ byte ArduinoFDCClass::readSector(byte track, byte side, byte sector, byte *buffe
 
 byte ArduinoFDCClass::writeSector(byte track, byte side, byte sector, byte *buffer, bool verify)
 {
+  if(diskChanged()){
+    setDiskType(detectDiskType(m_driveType[m_currentDrive]));
+  }
   byte res = S_OK;
   byte diskType = m_diskType[m_currentDrive];
 
@@ -1745,6 +1753,9 @@ byte ArduinoFDCClass::writeSector(byte track, byte side, byte sector, byte *buff
 
 byte ArduinoFDCClass::formatDisk(byte *buffer, byte fromTrack, byte toTrack, byte interleave)
 {
+  if(diskChanged()){
+    setDiskType(detectDiskType(m_driveType[m_currentDrive]));
+  }
   byte res = S_OK;
   byte diskType = m_diskType[m_currentDrive];
   byte numTracks = geometry[diskType].numTracks;

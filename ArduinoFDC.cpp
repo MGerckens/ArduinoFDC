@@ -1359,7 +1359,7 @@ void ArduinoFDCClass::setDiskType(enum DiskType type)
 
 void ArduinoFDCClass::setDiskType(byte drive, enum DiskType type)
 {
-  if( type != m_diskType[drive] )
+  if( type != m_diskType[drive] && type != DiskType::NONE)
     {
       m_diskType[drive] = type;
 

@@ -215,7 +215,6 @@ void monitor() {
           dump_buffer(0, databuffer + 1, 512);
           Serial.println();
         } else {
-          Serial.println("in read");
           print_error(status);
         }
       } else
@@ -299,11 +298,16 @@ void monitor() {
         memset(databuffer, 0, 513);
       // }
     } else if( cmd == 'd'){
-      ArduinoFDCClass::DiskType type = ArduinoFDC.detectDiskType(ArduinoFDCClass::DriveType::Drive5p25in_HD);
-      if(type != ArduinoFDCClass::DiskType::NONE){
-        ArduinoFDC.setDiskType(type);
+      ArduinoFDCClass::DiskType type = ArduinoFDCClass::DiskType::NONE;
+      if(ArduinoFDC.diskChanged()){
+        ArduinoFDCClass::DiskType type = ArduinoFDC.detectDiskType(ArduinoFDCClass::DriveType::Drive5p25in_HD);
+        if(type != ArduinoFDCClass::DiskType::NONE){
+          ArduinoFDC.setDiskType(type);
+        }
+        Serial.print((int)type);
+      }else{
+        Serial.print((int)ArduinoFDC.getDiskType());
       }
-      Serial.println((int)type);
     }
     else if (cmd == 'h' || cmd == '?') {
       Serial.println(F("Commands (t=track (0-based), s=sector (1-based), h=head (0/1)):"));

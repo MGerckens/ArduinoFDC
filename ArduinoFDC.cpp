@@ -217,8 +217,9 @@ struct DriveGeometryStruct
 };
 
 
-static struct DriveGeometryStruct geometry[7] =
+static struct DriveGeometryStruct geometry[6] =
   {
+    {0,  0,  0,   0, 0},  // no disk
     {2, 40,  9,  80, 1},  // 5.25" DD (360 KB)
     {2, 40,  9,  80, 2},  // 5.25" DD disk in HD drive (360 KB)
     {2, 80, 15,  85, 1},  // 5.25" HD (1.2 MB)
@@ -1490,27 +1491,23 @@ ArduinoFDCClass::DiskType ArduinoFDCClass::detectDiskType(DriveType driveType){
       setDiskType(DiskType::DT_3_HD);
       if((sectorResult = testForSector(79,0,1)), (sectorResult == S_OK)){
         returnValue = DiskType::DT_3_HD;
-        break;
       }else if(sectorResult == S_NOSYNC){
         returnValue = DiskType::DT_3_DD;
-        break;
       }else{
         returnValue = DiskType::NONE;
-        break;
       }
+      break;
     }
     case DriveType::Drive5p25in_HD:{
       setDiskType(DiskType::DT_5_HD);
       if((sectorResult = testForSector(79,0,1)), (sectorResult == S_OK)){
         returnValue =  DiskType::DT_5_HD;
-        break;
       }else if(sectorResult == S_NOSYNC){
         returnValue = DiskType::DT_5_DDonHD;
-        break;
       }else{
         returnValue = DiskType::NONE;
-        break;
       }
+      break;
     }
     case DriveType::Drive5p25in_DD:{
       returnValue = DiskType::DT_5_DD;
@@ -1530,11 +1527,35 @@ byte ArduinoFDCClass::testForSector(byte track, byte side, byte sector)
   byte res = S_OK;
   byte diskType = m_diskType[m_currentDrive];
 
+  Serial.print("in ArduinoFDCClass::testForSector - diskType = ");
+  Serial.println(diskType);
+
   // do some sanity checks
   if( !m_initialized )
     return S_NOTINIT;
-  else if( track>=geometry[diskType].numTracks || sector<1 || sector>geometry[diskType].numSectors || side>1 )
+  else if( track>=geometry[diskType].numTracks){
+    Serial.print("in ArduinoFDCClass::testForSector - track num too high, ");
+    Serial.print(track);
+    Serial.print( " >= ");
+    Serial.println(geometry[diskType].numTracks);
     return S_NOHEADER;
+  } else if( sector<1){
+    Serial.print("in ArduinoFDCClass::testForSector - sector num too low, ");
+    Serial.print(sector);
+    Serial.println(" < 1");
+    return S_NOHEADER;
+  } else if (sector>geometry[diskType].numSectors ){
+    Serial.print("in ArduinoFDCClass::testForSector - sector num too high, ");
+    Serial.print(sector);
+    Serial.print(" > ");
+    Serial.println(geometry[diskType].numSectors);
+    return S_NOHEADER;
+  }else if (side>1 ){
+    Serial.print("in ArduinoFDCClass::testForSector - side num too high, ");
+    Serial.print(side);
+    Serial.println(" > 1");
+    return S_NOHEADER;
+  }
 
   // if motor is not running then turn it on now
   bool turnMotorOff = false;
